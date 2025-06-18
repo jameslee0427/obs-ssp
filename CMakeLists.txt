@@ -113,6 +113,12 @@ set(obs-ssp_SOURCES
     src/ssp-toolbar.cpp
     src/camera-status-manager.cpp
     src/util/pipe.c)
+	
+if(OS_WINDOWS)
+  list(APPEND obs-ssp_SOURCES src/util/pipe-windows.c)
+else()
+  list(APPEND obs-ssp_SOURCES src/util/pipe-posix.c)
+endif()
 
 set(obs-ssp_HEADERS src/obs-ssp.h src/ssp-mdns.h src/ssp-controller.h src/VFrameQueue.h
                      src/ssp-client.h
