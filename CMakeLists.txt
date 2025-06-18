@@ -79,7 +79,7 @@ target_include_directories(
     ${CMAKE_SOURCE_DIR}/src
     ${CMAKE_SOURCE_DIR}/lib/ssp/include
     ${CMAKE_SOURCE_DIR}/ssp_connector
-    ${CMAKE_SOURCE_DIR}/lib/obs-browser/include # Make sure obs-browser headers are findable
+    ${CMAKE_SOURCE_DIR}/lib/obs-browser/include 
 )
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE ENABLE_HEVC)

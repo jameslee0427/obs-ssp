@@ -149,7 +149,8 @@ struct ssp_source {
 
 // Add a global map to track active connections
 static std::mutex active_conns_mutex;
-static std::unordered_map<std::string, std::weak_ptr<ssp_connection>> active_conns;
+static std::unordered_map<std::string, std::weak_ptr<ssp_connection>>
+	active_conns;
 
 // Keep the active_ips for HTTP request tracking
 static std::mutex active_ips_mutex;
@@ -271,7 +272,7 @@ static void ssp_on_audio_data(struct imf::SspAudioData *audio,
 				s->audio.timestamp =
 					(uint64_t)audio->pts * 1000;
 			}
-			if(s->running)
+			if (s->running)
 				obs_source_output_audio(s->source, &s->audio);
 		} else {
 			break;
@@ -312,7 +313,7 @@ static void ssp_on_meta_data(struct imf::SspVideoMeta *v,
 static void ssp_on_disconnected(ssp_connection *s)
 {
 	ssp_blog(LOG_INFO, "ssp device disconnected.");
-	
+
 	// Get weak_ptr from global map
 	std::weak_ptr<ssp_connection> weak_conn;
 	{
@@ -325,26 +326,36 @@ static void ssp_on_disconnected(ssp_connection *s)
 
 	if (s->running) {
 		ssp_blog(LOG_INFO, "still running, reconnect...");
-		
+
 		// Set a flag that we're attempting to reconnect
 		static std::atomic<bool> reconnecting(false);
-		
+
 		// Only allow one reconnect thread at a time
 		if (!reconnecting.exchange(true)) {
 			pthread_t thread;
-			pthread_create(&thread, nullptr, [](void *data) -> void* {
-				auto weak_conn = *static_cast<std::weak_ptr<ssp_connection>*>(data);
-				delete static_cast<std::weak_ptr<ssp_connection>*>(data);
-				
-				// Try to get shared_ptr from weak_ptr
-				if (auto conn = weak_conn.lock()) {
-					thread_ssp_reconnect(conn.get());
-				} else {
-					ssp_blog(LOG_INFO, "Connection was destroyed before reconnect could start");
-				}
-				reconnecting.store(false);
-				return nullptr;
-			}, new std::weak_ptr<ssp_connection>(weak_conn));
+			pthread_create(
+				&thread, nullptr,
+				[](void *data) -> void * {
+					auto weak_conn = *static_cast<
+						std::weak_ptr<ssp_connection> *>(
+						data);
+					delete static_cast<
+						std::weak_ptr<ssp_connection> *>(
+						data);
+
+					// Try to get shared_ptr from weak_ptr
+					if (auto conn = weak_conn.lock()) {
+						thread_ssp_reconnect(
+							conn.get());
+					} else {
+						ssp_blog(
+							LOG_INFO,
+							"Connection was destroyed before reconnect could start");
+					}
+					reconnecting.store(false);
+					return nullptr;
+				},
+				new std::weak_ptr<ssp_connection>(weak_conn));
 			pthread_detach(thread);
 		} else {
 			ssp_blog(LOG_INFO, "already reconnecting, skipping");
@@ -421,7 +432,7 @@ static void ssp_stop(ssp_source *s)
 	if (!s) {
 		return;
 	}
-	
+
 	// Remove from active connections map
 	if (s->source_ip) {
 		std::lock_guard<std::mutex> lock(active_conns_mutex);
@@ -429,7 +440,7 @@ static void ssp_stop(ssp_source *s)
 	}
 
 	auto conn = s->conn;
-	s->conn = nullptr;  // Clear shared_ptr
+	s->conn = nullptr; // Clear shared_ptr
 	if (!conn) {
 		return;
 	}
@@ -457,11 +468,13 @@ static void ssp_conn_start(ssp_connection *s)
 	s->client->setOnAudioDataCallback(std::bind(ssp_on_audio_data, _1, s));
 	s->client->setOnMetaCallback(
 		std::bind(ssp_on_meta_data, _1, _2, _3, s));
-	s->client->setOnConnectionConnectedCallback(
-		[s]() { 
-			ssp_blog(LOG_INFO, "ssp connected successfully, resetting reconnect counter from %d to 0", s->reconnect_attempt.load()); 
-			s->reconnect_attempt = 0;
-		});
+	s->client->setOnConnectionConnectedCallback([s]() {
+		ssp_blog(
+			LOG_INFO,
+			"ssp connected successfully, resetting reconnect counter from %d to 0",
+			s->reconnect_attempt.load());
+		s->reconnect_attempt = 0;
+	});
 	s->client->setOnDisconnectedCallback(std::bind(ssp_on_disconnected, s));
 	s->client->setOnExceptionCallback(
 		std::bind(ssp_on_exception, _1, _2, s));
@@ -479,22 +492,23 @@ static void ssp_conn_start(ssp_connection *s)
 
 void *thread_ssp_reconnect(void *data)
 {
-	auto conn = static_cast<ssp_connection*>(data);
-	
+	auto conn = static_cast<ssp_connection *>(data);
+
 	// Calculate delay based on reconnect attempt
 	int attempt = conn->reconnect_attempt++;
 	int delay_seconds;
 	if (attempt == 0) {
-		delay_seconds = 3;  // First attempt: 3 seconds
+		delay_seconds = 3; // First attempt: 3 seconds
 	} else if (attempt == 1) {
-		delay_seconds = 6;  // Second attempt: 6 seconds
+		delay_seconds = 6; // Second attempt: 6 seconds
 	} else if (attempt == 2) {
 		delay_seconds = 10; // Third attempt: 10 seconds
 	} else {
 		delay_seconds = 15; // All later attempts: 15 seconds
 	}
-	
-	ssp_blog(LOG_INFO, "Waiting %d seconds before reconnect attempt %d...", delay_seconds, attempt + 1);
+
+	ssp_blog(LOG_INFO, "Waiting %d seconds before reconnect attempt %d...",
+		 delay_seconds, attempt + 1);
 	std::this_thread::sleep_for(std::chrono::seconds(delay_seconds));
 
 	// Check if connection is still valid before proceeding
@@ -502,7 +516,9 @@ void *thread_ssp_reconnect(void *data)
 		std::lock_guard<std::mutex> lock(active_conns_mutex);
 		auto it = active_conns.find(conn->source_ip);
 		if (it == active_conns.end() || it->second.expired()) {
-			ssp_blog(LOG_INFO, "Connection was destroyed during reconnect delay");
+			ssp_blog(
+				LOG_INFO,
+				"Connection was destroyed during reconnect delay");
 			return nullptr;
 		}
 	}
@@ -517,12 +533,12 @@ void *thread_ssp_reconnect(void *data)
 	auto queue = conn->queue;
 
 	if (client) {
-		client->Stop();		
+		client->Stop();
 		delete client;
 		conn->client = nullptr;
 	}
 	if (queue) {
-		queue->stop();		
+		queue->stop();
 		delete queue;
 		conn->queue = nullptr;
 	}
@@ -635,15 +651,18 @@ static void update_ssp_data(obs_data_t *settings, CameraStatus *status)
 		if (fps == "60") {
 			fps = "59.94";
 		}
-		obs_data_set_string(source_settings, PROP_FRAME_RATE,fps.c_str());
-		ssp_blog(LOG_INFO, "Setting framerate from camera: %d",fps.c_str());
+		obs_data_set_string(source_settings, PROP_FRAME_RATE,
+				    fps.c_str());
+		ssp_blog(LOG_INFO, "Setting framerate from camera: %d",
+			 fps.c_str());
 	}
 
 	// Update bitrate from camera (convert from bytes to Mbps)
 	if (streamInfo.bitrate_ > 0 &&
 	    !obs_data_has_user_value(source_settings, PROP_BITRATE)) {
 		int bitrateInMbps =
-			streamInfo.bitrate_ /1000; // Ensure we have a reasonable value between 5-300
+			streamInfo.bitrate_ /
+			1000; // Ensure we have a reasonable value between 5-300
 		if (bitrateInMbps >= 3 && bitrateInMbps <= 300) {
 			obs_data_set_int(source_settings, PROP_BITRATE,
 					 bitrateInMbps);
@@ -651,7 +670,7 @@ static void update_ssp_data(obs_data_t *settings, CameraStatus *status)
 				 "Setting bitrate from camera: %d Mbps",
 				 bitrateInMbps);
 		}
-	}	
+	}
 }
 bool source_ip_modified(void *data, obs_properties_t *props,
 			obs_property_t *property, obs_data_t *settings)
@@ -669,39 +688,40 @@ bool source_ip_modified(void *data, obs_properties_t *props,
 		obs_property_set_visible(check_ip, true);
 		return true;
 	}
-	
+
 	// Create CameraStatus if not already present
 	if (source_ip == nullptr || strlen(source_ip) == 0) {
 		return false;
 	}
 	ssp_blog(LOG_INFO, "source_ip_modified now %s", source_ip);
-	
+
 	if (s->cameraStatus != nullptr &&
 	    s->cameraStatus->getIp() == source_ip) {
 		return false;
 	}
 	ssp_stop(s);
 	//if (!s->cameraStatus) {
-		s->cameraStatus = CameraStatusManager::instance()->getOrCreate(source_ip);
+	s->cameraStatus =
+		CameraStatusManager::instance()->getOrCreate(source_ip);
 	//}
 	if (s->cameraStatus != nullptr) {
 		update_ssp_data(settings, s->cameraStatus);
 		obs_source_update(s->source, settings);
 	} else {
-		ssp_blog(LOG_INFO ,"cannot create camera status for %s",source_ip);
+		ssp_blog(LOG_INFO, "cannot create camera status for %s",
+			 source_ip);
 	}
-	
+
 	//s->cameraStatus->setIp(source_ip);
 	add_active_ip(source_ip);
 
-	s->cameraStatus->refreshAll(
-		[=, ip = source_ip](bool ok) {
+	s->cameraStatus->refreshAll([=, ip = source_ip](bool ok) {
 		if (ok && is_ip_active(ip)) {
 			s->ip_checked = true;
 			update_ssp_data(settings, s->cameraStatus);
 			//obs_source_update(s->source, settings);
 			//obs_source_update_properties(s->source);
-		}		
+		}
 	});
 	return false;
 }
@@ -713,11 +733,12 @@ static bool custom_ip_modify_callback(void *data, obs_properties_t *props,
 	auto s = (struct ssp_source *)data;
 	if (s->ip_checked || !s->do_check) {
 		s->ip_checked = false;
-		ssp_blog(LOG_INFO, "ip modified, no need to check.%s ",s->source_ip);
+		ssp_blog(LOG_INFO, "ip modified, no need to check.%s ",
+			 s->source_ip);
 		return false;
 	}
 	s->do_check = false;
-	
+
 	auto ip = obs_data_get_string(settings, PROP_CUSTOM_SOURCE_IP);
 	if (strcmp(ip, "") == 0) {
 		return false;
@@ -726,21 +747,20 @@ static bool custom_ip_modify_callback(void *data, obs_properties_t *props,
 	ssp_stop(s);
 	// Create CameraStatus if not already present
 	//if (!s->cameraStatus) {
-		s->cameraStatus = CameraStatusManager::instance()->getOrCreate(ip);
+	s->cameraStatus = CameraStatusManager::instance()->getOrCreate(ip);
 	//} /* else {
 	//	s->cameraStatus->setIp(ip);
 	//}*/
 	add_active_ip(ip);
 	s->cameraStatus->refreshAll(
 		[=, ip = std::string(s->source_ip)](bool ok) {
-		if (ok && is_ip_active(ip)) {
-			s->ip_checked = true;
-			update_ssp_data(settings, s->cameraStatus);
-			//obs_source_update(s->source, settings);
-			//obs_source_update_properties(s->source);
-		}
-		
-	});
+			if (ok && is_ip_active(ip)) {
+				s->ip_checked = true;
+				update_ssp_data(settings, s->cameraStatus);
+				//obs_source_update(s->source, settings);
+				//obs_source_update_properties(s->source);
+			}
+		});
 
 	ssp_blog(LOG_INFO, "ip check queued.");
 	return false;
@@ -757,7 +777,6 @@ static bool resolution_modify_callback(void *data, obs_properties_t *props,
 
 	auto resolution = obs_data_get_string(settings, PROP_RESOLUTION);
 
-
 	obs_property_list_add_string(framerates, "25 fps", "25");
 	obs_property_list_add_string(framerates, "30 fps", "29.97");
 
@@ -766,9 +785,10 @@ static bool resolution_modify_callback(void *data, obs_properties_t *props,
 	} else {
 		update_ssp_data(settings, s->cameraStatus);
 		//obs_source_update_properties(s->source);
-	}	
+	}
 
-	ssp_blog(LOG_INFO, "Camera model: %s", s->cameraStatus->model.toStdString().c_str());
+	ssp_blog(LOG_INFO, "Camera model: %s",
+		 s->cameraStatus->model.toStdString().c_str());
 	if (strcmp(resolution, "1920*1080") != 0 ||
 	    (s->cameraStatus != nullptr &&
 	     !s->cameraStatus->model.contains(E2C_MODEL_CODE,
@@ -800,7 +820,7 @@ obs_properties_t *ssp_source_getproperties(void *data)
 		props, PROP_SOURCE_IP,
 		obs_module_text("SSPPlugin.SourceProps.SourceIp"),
 		OBS_COMBO_TYPE_LIST, OBS_COMBO_FORMAT_STRING);
-	
+
 	snprintf(nametext, 256, "%s (%s)",
 		 obs_module_text("SSPPlugin.IP.Fixed"), SSP_IP_DIRECT);
 	obs_property_list_add_string(source_ip, nametext, SSP_IP_DIRECT);
@@ -822,9 +842,10 @@ obs_properties_t *ssp_source_getproperties(void *data)
 			continue;
 		}
 		if (active_ips.find(item->ip_address) != active_ips.end()) {
-			if (s->source_ip!=nullptr &&item->ip_address != s->source_ip) {
+			if (s->source_ip != nullptr &&
+			    item->ip_address != s->source_ip) {
 				continue;
-			}	
+			}
 			if (s->source_ip == nullptr) {
 				continue;
 			}
@@ -936,16 +957,15 @@ obs_properties_t *ssp_source_getproperties(void *data)
 		props, PROP_LED_TALLY,
 		obs_module_text("SSPPlugin.SourceProps.LedAsTally"));
 
-
-
 	// Hide certain properties if needed
-	if (s->cameraStatus && s->cameraStatus->model.contains(IPMANS_MODEL_CODE,
+	if (s->cameraStatus &&
+	    s->cameraStatus->model.contains(IPMANS_MODEL_CODE,
 					    Qt::CaseInsensitive)) {
 		obs_property_set_visible(resolutions, false);
 		obs_property_set_visible(encoders, false);
 		obs_property_set_visible(framerate, false);
 		obs_property_set_visible(tally, false);
-	} 
+	}
 	obs_data_t *settings = obs_source_get_settings(s->source);
 	if (s->source_ip != nullptr) {
 		obs_data_set_string(settings, PROP_SOURCE_IP, s->source_ip);
@@ -961,7 +981,9 @@ obs_properties_t *ssp_source_getproperties(void *data)
 			update_ssp_data(settings, s->cameraStatus);
 			//obs_source_update(s->source, settings);
 
-			ssp_blog(LOG_INFO,"%s update for the settings from camerastatus",s->source_ip);
+			ssp_blog(LOG_INFO,
+				 "%s update for the settings from camerastatus",
+				 s->source_ip);
 		}
 	}
 	obs_data_release(settings);
@@ -989,72 +1011,87 @@ static bool settings_changed(obs_data_t *new_settings, ssp_source *s)
 	// Check IP changes
 	const char *new_ip = obs_data_get_string(new_settings, PROP_SOURCE_IP);
 	if (strcmp(new_ip, PROP_CUSTOM_VALUE) == 0) {
-		new_ip = obs_data_get_string(new_settings, PROP_CUSTOM_SOURCE_IP);
+		new_ip = obs_data_get_string(new_settings,
+					     PROP_CUSTOM_SOURCE_IP);
 	}
 	if (s->source_ip && strcmp(s->source_ip, new_ip) != 0) {
-		ssp_blog(LOG_INFO, "IP changed from %s to %s", s->source_ip, new_ip);
+		ssp_blog(LOG_INFO, "IP changed from %s to %s", s->source_ip,
+			 new_ip);
 		return true;
 	}
 
 	// Check other critical settings that require restart
 	bool new_hwaccel = obs_data_get_bool(new_settings, PROP_HW_ACCEL);
 	if (s->hwaccel != new_hwaccel) {
-		ssp_blog(LOG_INFO, "HW acceleration setting changed from %d to %d", 
-				s->hwaccel, new_hwaccel);
+		ssp_blog(LOG_INFO,
+			 "HW acceleration setting changed from %d to %d",
+			 s->hwaccel, new_hwaccel);
 		return true;
 	}
 
 	int new_sync_mode = (int)obs_data_get_int(new_settings, PROP_SYNC);
 	if (s->sync_mode != new_sync_mode) {
-		ssp_blog(LOG_INFO, "Sync mode changed from %d to %d", 
-				s->sync_mode, new_sync_mode);
+		ssp_blog(LOG_INFO, "Sync mode changed from %d to %d",
+			 s->sync_mode, new_sync_mode);
 		return true;
 	}
 
-	int new_bitrate = obs_data_get_int(new_settings, PROP_BITRATE) * 1000 * 1000;
+	int new_bitrate =
+		obs_data_get_int(new_settings, PROP_BITRATE) * 1000 * 1000;
 	if (s->bitrate != new_bitrate) {
-		ssp_blog(LOG_INFO, "Bitrate changed from %d to %d", 
-				s->bitrate, new_bitrate);
+		ssp_blog(LOG_INFO, "Bitrate changed from %d to %d", s->bitrate,
+			 new_bitrate);
 		return true;
 	}
 
 	bool new_wait_i = obs_data_get_bool(new_settings, PROP_EXP_WAIT_I);
 	if (s->wait_i_frame != new_wait_i) {
-		ssp_blog(LOG_INFO, "Wait I-frame setting changed from %d to %d", 
-				s->wait_i_frame, new_wait_i);
+		ssp_blog(LOG_INFO, "Wait I-frame setting changed from %d to %d",
+			 s->wait_i_frame, new_wait_i);
 		return true;
 	}
 
 	// For encoder and resolution, we need to check if they would result in a different stream
-	const char *new_encoder = obs_data_get_string(new_settings, PROP_ENCODER);
-	const char *new_resolution = obs_data_get_string(new_settings, PROP_RESOLUTION);
-	const char *new_framerate = obs_data_get_string(new_settings, PROP_FRAME_RATE);
+	const char *new_encoder =
+		obs_data_get_string(new_settings, PROP_ENCODER);
+	const char *new_resolution =
+		obs_data_get_string(new_settings, PROP_RESOLUTION);
+	const char *new_framerate =
+		obs_data_get_string(new_settings, PROP_FRAME_RATE);
 	bool new_low_noise = obs_data_get_bool(new_settings, PROP_LOW_NOISE);
 
 	// If we have a camera status, check if the stream settings would change
 	if (s->cameraStatus) {
 		StreamInfo &current = s->cameraStatus->current_streamInfo;
-		int new_stream_index = (strcmp(new_encoder, "H265") == 0) ? 0 : 1;
-		
+		int new_stream_index = (strcmp(new_encoder, "H265") == 0) ? 0
+									  : 1;
+
 		// Parse resolution string (e.g. "1920*1080")
 		int new_width = 0, new_height = 0;
-		if (sscanf(new_resolution, "%d*%d", &new_width, &new_height) == 2) {
+		if (sscanf(new_resolution, "%d*%d", &new_width, &new_height) ==
+		    2) {
 
 			int ifps = atof(new_framerate) + 0.1;
-			int streamIndex = current.steamIndex_ == "stream1"?1:0 ;
-			if (current.width_ != new_width || current.height_ != new_height ||
+			int streamIndex = current.steamIndex_ == "stream1" ? 1
+									   : 0;
+			if (current.width_ != new_width ||
+			    current.height_ != new_height ||
 			    streamIndex != new_stream_index ||
 			    current.fps != ifps) {
-				ssp_blog(LOG_INFO, "Stream settings changed: %dx%d fps:%d @%s %s -> %dx%d fps:%d @%s %s %s",
-						current.width_, current.height_, 
-						current.fps,
-						current.steamIndex_.toStdString().c_str(),						
-						current.encoderType_.toStdString().c_str(),
-						new_width, new_height,
-						ifps,
-						new_stream_index == 0 ? "stream0" : "stream1",
-						new_encoder,
-						new_low_noise ? "low noise" : "normal");
+				ssp_blog(
+					LOG_INFO,
+					"Stream settings changed: %dx%d fps:%d @%s %s -> %dx%d fps:%d @%s %s %s",
+					current.width_, current.height_,
+					current.fps,
+					current.steamIndex_.toStdString()
+						.c_str(),
+					current.encoderType_.toStdString()
+						.c_str(),
+					new_width, new_height, ifps,
+					new_stream_index == 0 ? "stream0"
+							      : "stream1",
+					new_encoder,
+					new_low_noise ? "low noise" : "normal");
 				return true;
 			}
 		}
@@ -1065,23 +1102,23 @@ static bool settings_changed(obs_data_t *new_settings, ssp_source *s)
 void ssp_source_update(void *data, obs_data_t *settings)
 {
 	auto s = (struct ssp_source *)data;
-	
+
 	// Compare new settings with our stored data
 	bool needs_restart = settings_changed(settings, s);
 
 	// If no critical settings changed, we can skip the restart
-	if (!needs_restart && s->conn!=nullptr) {
-		ssp_blog(LOG_INFO, "No critical settings changed, skipping restart");
+	if (!needs_restart && s->conn != nullptr) {
+		ssp_blog(LOG_INFO,
+			 "No critical settings changed, skipping restart");
 		return;
 	}
 
-
-	ssp_blog(LOG_INFO, "Critical settings changed, stop %s",s->source_ip);
+	ssp_blog(LOG_INFO, "Critical settings changed, stop %s", s->source_ip);
 	ssp_stop(s);
 
 	s->hwaccel = obs_data_get_bool(settings, PROP_HW_ACCEL);
 	s->sync_mode = (int)obs_data_get_int(settings, PROP_SYNC);
-	const char* source_ip = obs_data_get_string(settings, PROP_SOURCE_IP);
+	const char *source_ip = obs_data_get_string(settings, PROP_SOURCE_IP);
 	if (strcmp(source_ip, PROP_CUSTOM_VALUE) == 0) {
 		source_ip =
 			obs_data_get_string(settings, PROP_CUSTOM_SOURCE_IP);
@@ -1092,32 +1129,33 @@ void ssp_source_update(void *data, obs_data_t *settings)
 	ssp_blog(LOG_INFO, "ip from %s to %s", s->source_ip, source_ip);
 	// Update source_ip and active IP tracking
 	std::string oldIp = s->source_ip == nullptr ? "" : s->source_ip;
-	if (s->source_ip && strcmp(s->source_ip ,source_ip)){
+	if (s->source_ip && strcmp(s->source_ip, source_ip)) {
 		remove_active_ip(s->source_ip);
 		free((void *)s->source_ip);
 		s->source_ip = strdup(source_ip);
 	} else if (s->source_ip == nullptr) {
 		s->source_ip = strdup(source_ip);
 	}
-	
+
 	add_active_ip(s->source_ip);
 	const char *sourceName = obs_source_get_name(s->source);
-	if (sourceName && source_ip && strlen(source_ip) > 0 ) {	
+	if (sourceName && source_ip && strlen(source_ip) > 0) {
 		if (oldIp != "") {
 			SspToolbarManager::instance()->removeSourceAction(
-					sourceName,
-					oldIp.c_str());
+				sourceName, oldIp.c_str());
 		}
-		SspToolbarManager::instance()->addSourceAction(
-			sourceName, source_ip);	
+		SspToolbarManager::instance()->addSourceAction(sourceName,
+							       source_ip);
 	}
 	// Get or create CameraStatus from the manager (without reference counting)
 	// This will fetch an existing one or create a new one that will persist
-	s->cameraStatus = CameraStatusManager::instance()->getOrCreate(source_ip);
+	s->cameraStatus =
+		CameraStatusManager::instance()->getOrCreate(source_ip);
 
 	// Only proceed if we have a valid CameraStatus
 	if (!s->cameraStatus) {
-		ssp_blog(LOG_WARNING, "No CameraStatus available, can't proceed");
+		ssp_blog(LOG_WARNING,
+			 "No CameraStatus available, can't proceed");
 		return;
 	}
 
@@ -1134,7 +1172,7 @@ void ssp_source_update(void *data, obs_data_t *settings)
 
 	auto encoder = obs_data_get_string(settings, PROP_ENCODER);
 	auto resolution = obs_data_get_string(settings, PROP_RESOLUTION);
-	
+
 	auto low_noise = obs_data_get_bool(settings, PROP_LOW_NOISE);
 	auto framerate = obs_data_get_string(settings, PROP_FRAME_RATE);
 	auto bitrate = obs_data_get_int(settings, PROP_BITRATE);
@@ -1147,28 +1185,33 @@ void ssp_source_update(void *data, obs_data_t *settings)
 		stream_index = 1;
 	}
 
-	bitrate *= 1000* 1000;
+	bitrate *= 1000 * 1000;
 
 	s->bitrate = bitrate;
 
 	ssp_blog(LOG_INFO, "Calling setStream on ssp source %s", s->source_ip);
 	s->cameraStatus->setStream(
 		stream_index, resolution, low_noise, framerate, bitrate,
-		[s, nocheck, ip = std::string(s->source_ip)](bool ok, QString reason) {
+		[s, nocheck, ip = std::string(s->source_ip)](bool ok,
+							     QString reason) {
 			// Check if this IP is still active
 			if (!is_ip_active(ip)) {
-				ssp_blog(LOG_INFO, "Source for IP %s was destroyed before stream setup completed", ip.c_str());
+				ssp_blog(
+					LOG_INFO,
+					"Source for IP %s was destroyed before stream setup completed",
+					ip.c_str());
 				return;
 			}
 
 			if (!ok && !nocheck) {
 				blog(LOG_INFO, "%s",
-					 QString("setStream failed, not starting ssp: %1")
-						 .arg(reason)
-						 .toStdString()
-						 .c_str());
+				     QString("setStream failed, not starting ssp: %1")
+					     .arg(reason)
+					     .toStdString()
+					     .c_str());
 			} else {
-				ssp_blog(LOG_INFO, "Set stream succeeded, starting ssp");
+				ssp_blog(LOG_INFO,
+					 "Set stream succeeded, starting ssp");
 				// Double check IP is still active before starting
 				if (is_ip_active(ip)) {
 					if (!s->conn) {
@@ -1179,9 +1222,12 @@ void ssp_source_update(void *data, obs_data_t *settings)
 							"Source for IP %s already started!!",
 							ip.c_str());
 					}
-					
+
 				} else {
-					ssp_blog(LOG_INFO, "Source for IP %s was destroyed before stream could start", ip.c_str());
+					ssp_blog(
+						LOG_INFO,
+						"Source for IP %s was destroyed before stream could start",
+						ip.c_str());
 				}
 			}
 		});
@@ -1232,16 +1278,16 @@ void *ssp_source_create(obs_data_t *settings, obs_source_t *source)
 	s->no_check = true;
 	s->ip_checked = false;
 	s->cameraStatus = nullptr;
-	s->sync_mode = PROP_SYNC_SSP_TIMESTAMP;	
+	s->sync_mode = PROP_SYNC_SSP_TIMESTAMP;
 	s->wait_i_frame = true;
 	s->hwaccel = false;
 
 	// Get source IP from settings
-	const char* sourceIp = obs_data_get_string(settings, PROP_SOURCE_IP);
+	const char *sourceIp = obs_data_get_string(settings, PROP_SOURCE_IP);
 	if (strcmp(sourceIp, PROP_CUSTOM_VALUE) == 0) {
 		sourceIp = obs_data_get_string(settings, PROP_CUSTOM_SOURCE_IP);
 	}
-	
+
 	// Add IP to active set if we have a valid IP
 	if (sourceIp && strlen(sourceIp) > 0) {
 		add_active_ip(sourceIp);
@@ -1249,8 +1295,9 @@ void *ssp_source_create(obs_data_t *settings, obs_source_t *source)
 	s->source_ip = nullptr;
 	// Get or create the CameraStatus from manager only if we have a valid IP
 	if (sourceIp && strlen(sourceIp) > 0) {
-		s->cameraStatus = CameraStatusManager::instance()->getOrCreate(sourceIp);
-		
+		s->cameraStatus =
+			CameraStatusManager::instance()->getOrCreate(sourceIp);
+
 		// If we got a valid camera status with stream info, update settings
 		if (s->cameraStatus->model != nullptr &&
 		    !s->cameraStatus->model.isEmpty()) {
@@ -1259,15 +1306,16 @@ void *ssp_source_create(obs_data_t *settings, obs_source_t *source)
 		}
 		s->source_ip = strdup(sourceIp);
 	}
-	
+
 	//s->source_ip = nullptr;
-	
+
 	ssp_source_update(s, settings);
 
 	// Add toolbar action for the new source
-	const char* sourceName = obs_source_get_name(source);
+	const char *sourceName = obs_source_get_name(source);
 	if (sourceName && sourceIp && strlen(sourceIp) > 0) {
-		SspToolbarManager::instance()->addSourceAction(sourceName, sourceIp);
+		SspToolbarManager::instance()->addSourceAction(sourceName,
+							       sourceIp);
 	}
 
 	return s;
@@ -1300,36 +1348,35 @@ void ssp_source_destroy(void *data)
 			},
 			Qt::QueuedConnection);
 	}
-	
+
 	// Remove IP from active set if we have a valid IP
 	if (s->source_ip) {
 		remove_active_ip(s->source_ip);
 	}
-	
+
 	// First, ensure we have a valid source
 	if (!s->source) {
 		return;
 	}
 	ssp_stop(s);
-	
 
 	// Properly release the CameraStatus reference
 	if (s->cameraStatus && s->source_ip) {
 		std::string ipStr(s->source_ip);
 		CameraStatusManager::instance()->release(ipStr);
 	}
-	
+
 	// Cleanup the rest of the source
 	if (s->source_ip) {
 		free((void *)s->source_ip);
 		s->source_ip = nullptr;
 	}
-	
-	
+
 	bfree(s);
 	ssp_blog(LOG_INFO, "source destroyed.");
 }
-void ssp_source_load(void* data, obs_data_t* settings) {
+void ssp_source_load(void *data, obs_data_t *settings)
+{
 	ssp_blog(LOG_INFO, "source load.");
 }
 struct obs_source_info create_ssp_source_info()

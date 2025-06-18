@@ -38,7 +38,6 @@ CameraStatus::CameraStatus() : QObject()
 	connect(this, SIGNAL(onSetLed(bool)), this, SLOT(doSetLed(bool)));
 	connect(this, SIGNAL(onRefresh(StatusUpdateCallback)), this,
 		SLOT(doRefresh(StatusUpdateCallback)));
-
 };
 
 void CameraStatus::setIp(const QString &ip)
@@ -51,7 +50,7 @@ void CameraStatus::getResolution(const StatusUpdateCallback &callback)
 	// Make sure this operation runs in the main thread
 	if (QThread::currentThread() != QApplication::instance()->thread()) {
 		QMetaObject::invokeMethod(
-			this, 
+			this,
 			[this, callback]() { this->getResolution(callback); },
 			Qt::QueuedConnection);
 		return;
@@ -82,7 +81,7 @@ void CameraStatus::getFramerate(const StatusUpdateCallback &callback)
 	// Make sure this operation runs in the main thread
 	if (QThread::currentThread() != QApplication::instance()->thread()) {
 		QMetaObject::invokeMethod(
-			this, 
+			this,
 			[this, callback]() { this->getFramerate(callback); },
 			Qt::QueuedConnection);
 		return;
@@ -112,8 +111,10 @@ void CameraStatus::getCurrentStream(const StatusUpdateCallback &callback)
 	// Make sure this operation runs in the main thread
 	if (QThread::currentThread() != QApplication::instance()->thread()) {
 		QMetaObject::invokeMethod(
-			this, 
-			[this, callback]() { this->getCurrentStream(callback); },
+			this,
+			[this, callback]() {
+				this->getCurrentStream(callback);
+			},
 			Qt::QueuedConnection);
 		return;
 	}
@@ -135,10 +136,12 @@ void CameraStatus::getCurrentStream(const StatusUpdateCallback &callback)
 					blog(LOG_INFO,
 					     "%s get stream info % s, %d %dx%d ",
 					     getIp().toStdString().c_str(),
-					     current_streamInfo.steamIndex_.toStdString().c_str(),
-							current_streamInfo.fps,
-						    current_streamInfo.width_,
-						    current_streamInfo.height_);
+					     current_streamInfo.steamIndex_
+						     .toStdString()
+						     .c_str(),
+					     current_streamInfo.fps,
+					     current_streamInfo.width_,
+					     current_streamInfo.height_);
 					callback(true);
 					return true;
 				});
@@ -170,8 +173,7 @@ void CameraStatus::getInfo(const StatusUpdateCallback &callback)
 	// Make sure this operation runs in the main thread
 	if (QThread::currentThread() != QApplication::instance()->thread()) {
 		QMetaObject::invokeMethod(
-			this, 
-			[this, callback]() { this->getInfo(callback); },
+			this, [this, callback]() { this->getInfo(callback); },
 			Qt::QueuedConnection);
 		return;
 	}
@@ -181,7 +183,8 @@ void CameraStatus::getInfo(const StatusUpdateCallback &callback)
 			callback(false);
 			return false;
 		}
-		QJsonDocument doc(QJsonDocument::fromJson(rsp->currentValue.toUtf8()));
+		QJsonDocument doc(
+			QJsonDocument::fromJson(rsp->currentValue.toUtf8()));
 
 		model = doc["model"].toString();
 		name = doc["cameraName"].toString();
@@ -203,8 +206,6 @@ void CameraStatus::doSetLed(bool isOn)
 				    });
 }
 
-
-
 void CameraStatus::setStream(int stream_index, QString resolution,
 			     bool low_noise, QString fps, int bitrate,
 			     StatusReasonUpdateCallback cb)
@@ -212,11 +213,9 @@ void CameraStatus::setStream(int stream_index, QString resolution,
 	blog(LOG_INFO, "In ::setStream emitting onSetStream");
 	emit onSetStream(stream_index, resolution, low_noise, fps, bitrate, cb);
 }
-void CameraStatus::doSetStreamReolutionInternal(
-						QString index, 
+void CameraStatus::doSetStreamReolutionInternal(QString index,
 						QString real_resolution,
-						QString width,
-						QString height,
+						QString width, QString height,
 						QString bitrate2, QString fps,
 						StatusReasonUpdateCallback cb)
 
@@ -224,7 +223,8 @@ void CameraStatus::doSetStreamReolutionInternal(
 	if (current_resolution == real_resolution) {
 		doSetStreamFpsInternal(index, width, height, bitrate2, fps, cb);
 	} else {
-		blog(LOG_INFO, "current resolution %s -> %s ", current_resolution.toStdString().c_str(),
+		blog(LOG_INFO, "current resolution %s -> %s ",
+		     current_resolution.toStdString().c_str(),
 		     real_resolution.toStdString().c_str());
 		controller->setCameraConfig(
 			CONFIG_KEY_MOVIE_RESOLUTION, real_resolution,
@@ -242,11 +242,10 @@ void CameraStatus::doSetStreamReolutionInternal(
 			});
 	}
 }
-void CameraStatus::doSetStreamIndexInternal(
-					  QString index, QString width,
-					  QString height, QString bitrate2,
-					  QString fps,
-					  StatusReasonUpdateCallback cb)
+void CameraStatus::doSetStreamIndexInternal(QString index, QString width,
+					    QString height, QString bitrate2,
+					    QString fps,
+					    StatusReasonUpdateCallback cb)
 {
 	if (this->current_index == index) {
 		blog(LOG_INFO, "Setting stream attr , stream index correct");
@@ -254,7 +253,8 @@ void CameraStatus::doSetStreamIndexInternal(
 		doSetStreamInternal(index, width, height, bitrate2, fps, cb);
 	} else {
 		blog(LOG_INFO, "Setting index from %s to %s ",
-			current_index.toStdString().c_str(),index.toStdString().c_str());
+		     current_index.toStdString().c_str(),
+		     index.toStdString().c_str());
 		controller->setSendStream(index, [=](HttpResponse *rsp) {
 			if (rsp->statusCode != 200 || rsp->code != 0) {
 				return cb(
@@ -268,8 +268,7 @@ void CameraStatus::doSetStreamIndexInternal(
 		});
 	}
 }
-void CameraStatus::doSetStreamFpsInternal(
-					  QString index, QString width,
+void CameraStatus::doSetStreamFpsInternal(QString index, QString width,
 					  QString height, QString bitrate2,
 					  QString fps,
 					  StatusReasonUpdateCallback cb)
@@ -278,45 +277,42 @@ void CameraStatus::doSetStreamFpsInternal(
 	QString projectFps = fps;
 	if (fps == "30") {
 		projectFps = "29.97";
-	}
-	else if (fps == "60") {
+	} else if (fps == "60") {
 		projectFps = "59.94";
 	}
 	if (this->current_framerate == projectFps) {
 		doSetStreamIndexInternal(index, width, height, bitrate2, fps,
-					 cb);	
+					 cb);
 	} else {
 		blog(LOG_INFO, "current projectfps %s -> %s ",
-		     current_framerate.toStdString().c_str(), projectFps.toStdString().c_str());
+		     current_framerate.toStdString().c_str(),
+		     projectFps.toStdString().c_str());
 		controller->setCameraConfig(
 			CONFIG_KEY_PROJECT_FPS, projectFps,
 			[=](HttpResponse *rsp) {
 				if (rsp->statusCode != 200 || rsp->code != 0) {
-				return cb(false,
-					  QString("Failed to set fps to %1")
-						  .arg(fps));
-			}
-			this->current_framerate = fps;
-			doSetStreamIndexInternal(index, width, height, bitrate2,
-						 fps, cb);	
-
-		});
+					return cb(
+						false,
+						QString("Failed to set fps to %1")
+							.arg(fps));
+				}
+				this->current_framerate = fps;
+				doSetStreamIndexInternal(index, width, height,
+							 bitrate2, fps, cb);
+			});
 	}
 }
 void CameraStatus::doSetStreamBitrateInternal(int stream_index,
-						QString resolution,
-						bool low_noise, QString fps,
-						int bitrate,
-						StatusReasonUpdateCallback cb)
+					      QString resolution,
+					      bool low_noise, QString fps,
+					      int bitrate,
+					      StatusReasonUpdateCallback cb)
 {
 }
-void CameraStatus::doSetStreamInternal(
-						QString index,
-						QString width, 
-						QString height,
-						QString bitrate2,
-						QString fps,				
-						StatusReasonUpdateCallback cb)
+void CameraStatus::doSetStreamInternal(QString index, QString width,
+				       QString height, QString bitrate2,
+				       QString fps,
+				       StatusReasonUpdateCallback cb)
 {
 	controller->getStreamInfo(index.toLower(), [=](HttpResponse *rsp) {
 		if (rsp->statusCode != 200 || rsp->code != 0) {
@@ -324,30 +320,28 @@ void CameraStatus::doSetStreamInternal(
 		}
 		int ifps = int(fps.toFloat() + 0.1);
 		current_streamInfo = rsp->streamInfo;
-		if(width.toInt() == rsp->streamInfo.width_ &&
+		if (width.toInt() == rsp->streamInfo.width_ &&
 		    height.toInt() == rsp->streamInfo.height_ &&
 		    ifps == rsp->streamInfo.fps &&
-			bitrate2.toInt() == rsp->streamInfo.bitrate_*1000 &&
-		    10 == rsp->streamInfo.gop_
-			) {
+		    bitrate2.toInt() == rsp->streamInfo.bitrate_ * 1000 &&
+		    10 == rsp->streamInfo.gop_) {
 
 			cb(true, "same no need change");
 			return;
 		}
 		//current_streamInfo = rsp->streamInfo;
 		blog(LOG_INFO, "Setting stream from %dx%d %d %d to %dx%d %d %d",
-			width.toInt(), height.toInt(), ifps, bitrate2.toInt(),
-			rsp->streamInfo.width_,
-			rsp->streamInfo.height_,
-			rsp->streamInfo.fps,
-			rsp->streamInfo.bitrate_*1000);
+		     width.toInt(), height.toInt(), ifps, bitrate2.toInt(),
+		     rsp->streamInfo.width_, rsp->streamInfo.height_,
+		     rsp->streamInfo.fps, rsp->streamInfo.bitrate_ * 1000);
 		if (current_streamInfo.status_ == "idle") {
-				controller->setStreamAttr(
+			controller->setStreamAttr(
 				index.toLower(), width, height, bitrate2, "10",
 				QString::number(ifps),
 				current_streamInfo.encoderType_,
 				[=](HttpResponse *rsp) {
-					if (rsp->statusCode != 200 || rsp->code != 0) {
+					if (rsp->statusCode != 200 ||
+					    rsp->code != 0) {
 						return cb(
 							false,
 							QString("Could not set stream attr"));
@@ -356,20 +350,21 @@ void CameraStatus::doSetStreamInternal(
 				});
 		} else {
 			// cannot set codec gop ,reoslution etc.
-			blog(LOG_INFO,"stream not idle, cannot set ");
+			blog(LOG_INFO, "stream not idle, cannot set ");
 			return cb(true, "in streaming");
 		}
 	});
 }
-
 
 void CameraStatus::doSetStream(int stream_index, QString resolution,
 			       bool low_noise, QString fps, int bitrate,
 			       StatusReasonUpdateCallback cb)
 {
 	bool need_downresolution = false;
-	blog(LOG_INFO, "In doSetStream index %d resolution %s fps %s bitrate %d",stream_index,
-		resolution.toStdString().c_str(),fps.toStdString().c_str(),bitrate);
+	blog(LOG_INFO,
+	     "In doSetStream index %d resolution %s fps %s bitrate %d",
+	     stream_index, resolution.toStdString().c_str(),
+	     fps.toStdString().c_str(), bitrate);
 	if (model.contains(E2C_MODEL_CODE, Qt::CaseInsensitive)) {
 		if (resolution != "1920*1080" && fps.toDouble() > 30) {
 			return cb(
@@ -380,7 +375,7 @@ void CameraStatus::doSetStream(int stream_index, QString resolution,
 			need_downresolution = true;
 		}
 	}
-	auto bitrate2 = QString::number(bitrate); 
+	auto bitrate2 = QString::number(bitrate);
 
 	if (model.contains(IPMANS_MODEL_CODE, Qt::CaseInsensitive)) {
 		auto index =
@@ -425,14 +420,13 @@ void CameraStatus::doSetStream(int stream_index, QString resolution,
 
 	auto index = QString("Stream") + QString::number(stream_index);
 	//blog(LOG_INFO, "Setting movie resolution");
-	doSetStreamReolutionInternal(
-		index, real_resolution, width, height, bitrate2, fps,cb);
-	
+	doSetStreamReolutionInternal(index, real_resolution, width, height,
+				     bitrate2, fps, cb);
 }
 
 CameraStatus::~CameraStatus()
-{ 
-	  if (controller) {
+{
+	if (controller) {
 		QThread *controllerThread = controller->thread();
 		QThread *currentThread = QThread::currentThread();
 
@@ -446,16 +440,12 @@ CameraStatus::~CameraStatus()
 			qDebug()
 				<< "CameraStatus Destructor: In different thread. Queuing cleanup for controller.";
 
-			
-
 			// 2. Safely delete the controller on its own thread.
 			//    controller->deleteLater() is the simplest and generally the best way.
 			//    It posts a delete event to the controller's thread event loop.
 			controller->deleteLater();
 			qDebug()
 				<< "CameraStatus Destructor: Queued deleteLater for controller.";
-
-
 		}
 		controller = nullptr;
 	} else {

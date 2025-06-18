@@ -56,7 +56,7 @@ CameraController::~CameraController()
 {
 	cancelAllReqs();
 	disconnect(this);
-	while (httpRequestQueue_ !=nullptr &&!httpRequestQueue_->isEmpty()) {
+	while (httpRequestQueue_ != nullptr && !httpRequestQueue_->isEmpty()) {
 		delete httpRequestQueue_->dequeue();
 	}
 	delete httpRequestQueue_;
@@ -227,7 +227,7 @@ void CameraController::setStreamAttr(const QString &index, const QString &width,
 		.append(fps)
 		.append("&gop_n=")
 		.append(gop)
-		.append("&bitwidth=8bit");	
+		.append("&bitwidth=8bit");
 	requestForCode(shortPath, callback);
 }
 void CameraController::setStreamBitrateAndGop(const QString &index,
@@ -273,8 +273,7 @@ void CameraController::setStreamResolution(const QString &index,
 		.append("&width=")
 		.append(width)
 		.append("&height=")
-		.append(height)
-		;
+		.append(height);
 	requestForCode(shortPath, callback);
 }
 void CameraController::setStreamCodec(const QString &index,
@@ -354,23 +353,21 @@ void CameraController::nextRequest(HttpRequest *req)
 	request.setRawHeader("Connection", "Keep-Alive");
 	request.setUrl(url);
 
-	 QMetaObject::invokeMethod(
+	QMetaObject::invokeMethod(
 		QApplication::instance(),
-		[this, req,request]() {
+		[this, req, request]() {
 			auto reply_ = networkManager_->get(request);
 			QTimer::singleShot(req->timeout, reply_, SLOT(abort()));
-			
+
 			connect(reply_, &QNetworkReply::finished,
 				[=]() { handleRequestResult(req, reply_); });
 
 			connect(reply_, &QNetworkReply::errorOccurred,
 				[](QNetworkReply::NetworkError error) {
-					qDebug()
-						<< "request error: " << error;
+					qDebug() << "request error: " << error;
 				});
 		},
 		Qt::QueuedConnection);
-
 }
 
 void CameraController::nextRequest()

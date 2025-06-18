@@ -70,8 +70,6 @@ private slots:
 			 StatusReasonUpdateCallback cb);
 	//These functions are called in doSetStream Based on need.
 
-	
-
 	void doRefresh(StatusUpdateCallback cb);
 	void doSetLed(bool on);
 
@@ -85,19 +83,16 @@ private:
 				    QString height, QString bitrate2,
 				    QString fps, StatusReasonUpdateCallback cb);
 	void doSetStreamIndexInternal(QString index, QString width,
-				    QString height, QString bitrate2,
-				    QString fps, StatusReasonUpdateCallback cb);
+				      QString height, QString bitrate2,
+				      QString fps,
+				      StatusReasonUpdateCallback cb);
 	void doSetStreamBitrateInternal(int stream_index, QString resolution,
 					bool low_noise, QString fps,
 					int bitrate,
 					StatusReasonUpdateCallback cb);
-	void doSetStreamInternal(						
-						QString index,
-						QString width, 
-						QString height,
-						QString bitrate2,
-						QString fps,				
-						StatusReasonUpdateCallback cb); 
+	void doSetStreamInternal(QString index, QString width, QString height,
+				 QString bitrate2, QString fps,
+				 StatusReasonUpdateCallback cb);
 
 	CameraController *controller;
 };
