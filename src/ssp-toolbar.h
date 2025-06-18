@@ -14,59 +14,66 @@ class QCefWidget;
 struct QCefCookieManager;
 
 class SspToolbarManager : public QObject {
-    Q_OBJECT
+	Q_OBJECT
 public:
-    static SspToolbarManager* instance();
-    static void shutdown();
-    static SspToolbarManager *checkInstance() { return s_instance; };
-    // Interface methods (will emit signals)
-    void addSourceAction(const QString& sourceName, const QString& ip);
-    void removeSourceAction(const QString& sourceName, const QString& ip);
+	static SspToolbarManager *instance();
+	static void shutdown();
+	static SspToolbarManager *checkInstance() { return s_instance; };
+	// Interface methods (will emit signals)
+	void addSourceAction(const QString &sourceName, const QString &ip);
+	void removeSourceAction(const QString &sourceName, const QString &ip);
 
-    // Called from QAction::toggled, should be main-thread safe
-    void showBrowserDock(const QString& sourceName, const QString& ip, const QString& sourceKey);
+	// Called from QAction::toggled, should be main-thread safe
+	void showBrowserDock(const QString &sourceName, const QString &ip,
+			     const QString &sourceKey);
 
 signals:
-    void addSourceActionRequested(const QString& sourceName, const QString& ip);
-    void removeSourceActionRequested(const QString& sourceName, const QString& ip);
+	void addSourceActionRequested(const QString &sourceName,
+				      const QString &ip);
+	void removeSourceActionRequested(const QString &sourceName,
+					 const QString &ip);
 
 protected:
-    // Event filter to catch close events
-    bool eventFilter(QObject* watched, QEvent* event) override;
+	// Event filter to catch close events
+	bool eventFilter(QObject *watched, QEvent *event) override;
 
 private slots:
-    void doAddSourceAction(const QString& sourceName, const QString& ip);
-    void doRemoveSourceAction(const QString& sourceName, const QString& ip);
-    void checkBrowserInitialization(); // Keep this as a slot for QTimer
+	void doAddSourceAction(const QString &sourceName, const QString &ip);
+	void doRemoveSourceAction(const QString &sourceName, const QString &ip);
+	void checkBrowserInitialization(); // Keep this as a slot for QTimer
 
 private:
-    explicit SspToolbarManager(QObject* parent = nullptr);
-    ~SspToolbarManager();
-    
-    // Browser initialization methods
-    void initializeBrowserPanel();
-    // void checkBrowserInitialization(); // Moved to private slots
-    void processPendingDocks();
-    QCefWidget* createBrowserWidget(QDockWidget* dock, const QString& sourceName, const QString& ip);
-    void suppressUnloadDialog(QCefWidget* widget);
-    void scheduleSuppressUnloadDialog(const QString& sourceKey);
+	explicit SspToolbarManager(QObject *parent = nullptr);
+	~SspToolbarManager();
 
-    // Toolbar management
-    void createToolbar();
-    void removeToolbar();
-    void shutdownInternal();
-    QDockWidget* createBrowserDock(const QString& sourceName, const QString& ip, const QString& sourceKey);
+	// Browser initialization methods
+	void initializeBrowserPanel();
+	// void checkBrowserInitialization(); // Moved to private slots
+	void processPendingDocks();
+	QCefWidget *createBrowserWidget(QDockWidget *dock,
+					const QString &sourceName,
+					const QString &ip);
+	void suppressUnloadDialog(QCefWidget *widget);
+	void scheduleSuppressUnloadDialog(const QString &sourceKey);
 
-    // Static members
-    static SspToolbarManager *s_instance;
-    static QCef* m_qcef;
-    static QCefCookieManager* panel_cookies;
+	// Toolbar management
+	void createToolbar();
+	void removeToolbar();
+	void shutdownInternal();
+	QDockWidget *createBrowserDock(const QString &sourceName,
+				       const QString &ip,
+				       const QString &sourceKey);
 
-    // Instance members
-    QToolBar* m_toolbar;
-    QMainWindow* m_mainWindow;
-    QTimer* m_initTimer;
-    std::atomic<bool> m_browserInitialized;
-    QMap<QString, QAction*> m_sourceActions;
-    QMap<QString, QDockWidget*> m_browserDocks;
-}; 
+	// Static members
+	static SspToolbarManager *s_instance;
+	static QCef *m_qcef;
+	static QCefCookieManager *panel_cookies;
+
+	// Instance members
+	QToolBar *m_toolbar;
+	QMainWindow *m_mainWindow;
+	QTimer *m_initTimer;
+	std::atomic<bool> m_browserInitialized;
+	QMap<QString, QAction *> m_sourceActions;
+	QMap<QString, QDockWidget *> m_browserDocks;
+};
