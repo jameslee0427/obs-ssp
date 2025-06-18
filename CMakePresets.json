@@ -61,7 +61,9 @@
       "displayName": "Windows x64 CI build",
       "description": "Build for Windows x64 on CI",
       "cacheVariables": {
-        "CMAKE_COMPILE_WARNING_AS_ERROR": true
+        "CMAKE_COMPILE_WARNING_AS_ERROR": true,
+        "CMAKE_PREFIX_PATH": "${sourceDir}/dependencies;${sourceDir}/dependencies/lib/cmake/libobs",
+        "libobs_DIR": "${sourceDir}/dependencies/lib/cmake/libobs"
       }
     },
     {
