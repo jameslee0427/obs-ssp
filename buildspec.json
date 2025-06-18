@@ -1,33 +1,33 @@
 {
     "dependencies": {
         "obs-studio": {
-            "version": "30.2.0",
+            "version": "31.0.3",
             "baseUrl": "https://github.com/obsproject/obs-studio/archive/refs/tags",
             "label": "OBS sources",
             "hashes": {
-                "macos": "a94e585aa9e1c300a9294df80d9370c1d83eb64d9c331002968c6422019821dc",
-                "windows-x64": "762eaa67162877e2073edd01ce9880b6ae25ccfe971c87d8bec5883fb1f95b7e"
+                "macos": "299bc7e55af949b15c3d45634c414c995d5d01f460fceb30d04e5d5c781dbe4b",
+                "windows-x64": "e8434dcee06f1702f0a0bbd1489296c77116fc51356835c3af4a6ed21b1e1c74"
             }
         },
         "prebuilt": {
-            "version": "2024-05-08",
+            "version": "2024-09-12",
             "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
             "label": "Pre-Built obs-deps",
             "hashes": {
-                "macos": "da3167a3efecfa67dd72e4f2b7964c3456d74c639d4c62aa21ec300ebd5007a8",
-                "windows-x64": "773c87a0d173125ef2768aaca6f6de64a7d6053213cc9f7d3970a301152042d8"
+                "macos": "c857b211ee378772994b632036e1e5befe66b37e85286cb8e3cefc1435d5220a",
+                "windows-x64": "d4a4f194591766891ad3c0b267deec3c4b85239c8fe557273559927456aeedbb"
             }
         },
         "qt6": {
-            "version": "2024-05-08",
+            "version": "2024-09-12",
             "baseUrl": "https://github.com/obsproject/obs-deps/releases/download",
             "label": "Pre-Built Qt6",
             "hashes": {
-                "macos": "248fb342e7ddf574af0960aaedeffb832deda1485dc81583302646e979593a6e",
-                "windows-x64": "8f459af5115ce081ae24b108712327e113893f250e14a902b1bd188b43873ed1"
+                "macos": "34a2de6b7f4d4d58fc5a15a4dba49a61d81a4045d0cedfc1a1f08c0dfb8047cf",
+                "windows-x64": "4d15ce13dbb0a8a2cabcce5ae0da5e80ee589b482a61b2025378465c1da32c4f"
             },
             "debugSymbols": {
-                "windows-x64": "e4bc882f23195becbe53f1594fe75bdb9ff4f1d01e319f6caf8e0a38000cb42b"
+                "windows-x64": "dad2351a5c9cd438168e1ed8fb453a2534532252edb555f1001a5e8eb3f1bbd4"
             }
         }
     },
@@ -38,7 +38,7 @@
     },
     "name": "obs-ssp",
     "displayName": "OBS ZCAM SSP",
-    "version": "0.13.0",
+    "version": "0.14.0",
     "author": "Hakusai Zhang",
     "website": "https://summershrimp.com",
     "email": "xm1994@gmail.com",

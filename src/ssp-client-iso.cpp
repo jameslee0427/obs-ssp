@@ -19,6 +19,7 @@ along with this program; If not, see <https://www.gnu.org/licenses/>
 #include <obs.h>
 #include <util/dstr.h>
 #include <util/platform.h>
+#include <memory>  // For std::unique_ptr
 
 #ifdef _WIN32
 #include <windows.h>
@@ -35,6 +36,13 @@ along with this program; If not, see <https://www.gnu.org/licenses/>
 
 #include "obs-ssp.h"
 #include "ssp-client-iso.h"
+#include <unistd.h>
+#include <QCoreApplication>
+#include <iostream>
+#include <QCoreApplication>
+#include <QDir>
+#include <QFileInfo>
+#include <QDebug>
 
 static size_t os_process_pipe_read_retry(os_process_pipe *pipe, uint8_t *dst,
 					 size_t size)
@@ -124,40 +132,94 @@ SSPClientIso::SSPClientIso(const std::string &ip, uint32_t bufferSize)
 #endif
 	connect(this, SIGNAL(Start()), this, SLOT(doStart()));
 }
+
+SSPClientIso::~SSPClientIso()
+{
+	// Ensure we stop the client and clean up resources
+	Stop();
+	
+	// Disconnect all signals to prevent callbacks after destruction
+	disconnect(this, SIGNAL(Start()), this, SLOT(doStart()));
+	
+	// Clear all callbacks to prevent dangling references
+	bufferFullCallback = nullptr;
+	audioDataCallback = nullptr;
+	metaCallback = nullptr;
+	disconnectedCallback = nullptr;
+	connectedCallback = nullptr;
+	h264DataCallback = nullptr;
+	exceptionCallback = nullptr;
+}
+
 using namespace std::placeholders;
 
 void SSPClientIso::doStart()
 {
-	struct dstr cmd;
+    char cwd[1024];
+        getcwd(cwd, sizeof(cwd));
+        //blog(LOG_INFO, "Current working directory: %s", cwd);
+        //ssp_connector_path = QCoreApplication::applicationDirPath() + "/ssp-connector";
+        blog(LOG_INFO, "ssp_connector_path: %s", ssp_connector_path.toStdString().c_str());
 
-	dstr_init_copy(&cmd, ssp_connector_path.toStdString().c_str());
-	dstr_insert_ch(&cmd, 0, '\"');
-	dstr_cat(&cmd, "\" ");
-	dstr_cat(&cmd, "--host ");
-	dstr_cat(&cmd, this->ip.c_str());
-	dstr_cat(&cmd, " --port ");
-	dstr_cat(&cmd, "9999");
+        //blog(LOG_INFO, "DYLD_LIBRARY_PATH: %s", getenv("DYLD_LIBRARY_PATH") ? getenv("DYLD_LIBRARY_PATH") : "unset");
+        //blog(LOG_INFO, "PATH: %s", getenv("PATH"));
 
-	auto tpipe = os_process_pipe_create(cmd.array, "r");
-	blog(LOG_INFO, "Start ssp-connector at: %s", cmd.array);
-	dstr_free(&cmd);
+        if (access(ssp_connector_path.toStdString().c_str(), X_OK) == 0) {
+            blog(LOG_INFO, "ssp-connector is executable");
+        } else {
+            blog(LOG_WARNING, "ssp-connector access failed: %s (errno=%d)", strerror(errno), errno);
+        }
 
-	if (!tpipe) {
-		blog(LOG_WARNING, "Start ssp-connector failed.");
-		return;
-	}
-	this->statusLock.lock();
-	this->running = true;
-	this->pipe = tpipe;
+		std::string lib_path = QFileInfo(ssp_connector_path).absolutePath().toStdString() + "/../Frameworks/libssp.dylib";
+        void *handle = dlopen(lib_path.c_str(), RTLD_LAZY);
+        if (handle) {
+            blog(LOG_INFO, "dlopen succeeded for libssp.dylib");
+            dlclose(handle);
+        } else {
+            blog(LOG_WARNING, "dlopen failed for libssp.dylib: %s", dlerror());
+        }
+     
+        qDebug() << "[obs-ssp] Starting ssp-connector at:" << ssp_connector_path;
+        blog(LOG_INFO, "[obs-ssp] Starting ssp-connector at: %s", ssp_connector_path.toUtf8().constData());
 
-	this->worker = std::thread(SSPClientIso::ReceiveThread, this);
-	this->statusLock.unlock();
-}
+    // Normalize path
+        ssp_connector_path = QDir::toNativeSeparators(ssp_connector_path);
+    
+        os_process_args_t *args = os_process_args_create(ssp_connector_path.toStdString().c_str());
+        os_process_args_add_arg(args, "--host");
+        os_process_args_add_arg(args, this->ip.c_str());
+        os_process_args_add_arg(args, "--port");
+        os_process_args_add_arg(args, "9999");
+
+        
+        auto tpipe = os_process_pipe_create2(args, "r");
+        blog(LOG_INFO, "Start ssp-connector with args");
+
+        os_process_args_destroy(args);
+
+        if (!tpipe) {
+            blog(LOG_WARNING, "Start ssp-connector failed: %s (errno=%d)", strerror(errno), errno);
+            char error_buf[1024] = {0};
+            int err = os_process_pipe_read_err(tpipe, (uint8_t*)error_buf, sizeof(error_buf)-1);
+            if (err > 0) {
+                blog(LOG_WARNING, "ssp-connector error output: %s", error_buf);
+            } else {
+                blog(LOG_WARNING, "No error output captured from ssp-connector");
+            }
+            return;
+        }
+
+        this->statusLock.lock();
+        this->running = true;
+        this->pipe = tpipe;
+        this->worker = std::thread(SSPClientIso::ReceiveThread, this);
+        this->statusLock.unlock();
+    }
 
 void *SSPClientIso::ReceiveThread(void *arg)
 {
 	auto th = (SSPClientIso *)arg;
-	Message *msg;
+	Message *msg = nullptr;
 	th->statusLock.lock();
 	auto pipe = th->pipe;
 	th->statusLock.unlock();
@@ -166,20 +228,22 @@ void *SSPClientIso::ReceiveThread(void *arg)
 	std::thread(dump_stderr, pipe).detach();
 #endif
 
-	msg = msg_recv(pipe);
-	if (!msg) {
-		blog(LOG_WARNING, "Receive error !");
+	// Use RAII to ensure message is freed
+	std::unique_ptr<Message, decltype(&msg_free)> initial_msg(msg_recv(pipe), msg_free);
+	if (!initial_msg) {
+		blog(LOG_WARNING, "%s Receive error !", th->getIp().c_str());
 		return nullptr;
 	}
-	if (msg->type != MessageType::ConnectorOkMsg) {
-		blog(LOG_WARNING, "Protocol error !");
+	if (initial_msg->type != MessageType::ConnectorOkMsg) {
+		blog(LOG_WARNING, "%s Protocol error !", th->getIp().c_str());
 		return nullptr;
 	}
 
 	while (th->running) {
-		msg = msg_recv(pipe);
+		// Use RAII to ensure message is freed
+		std::unique_ptr<Message, decltype(&msg_free)> msg(msg_recv(pipe), msg_free);
 		if (!msg) {
-			blog(LOG_WARNING, "Receive error !");
+			blog(LOG_WARNING, "%s Receive error !", th->getIp().c_str());
 			break;
 		}
 
@@ -209,10 +273,9 @@ void *SSPClientIso::ReceiveThread(void *arg)
 			blog(LOG_WARNING, "Protocol error !");
 			break;
 		}
-
-		msg_free(msg);
 	}
 
+	blog(LOG_WARNING, "%s Receive thread exit !",th->getIp().c_str());
 	return nullptr;
 }
 
@@ -224,9 +287,14 @@ void SSPClientIso::Restart()
 
 void SSPClientIso::Stop()
 {
-	blog(LOG_INFO, "ssp client stopping...");
+	blog(LOG_INFO, "ssp client %s stopping...",ip.c_str());
+	if (!running) {
+		blog(LOG_INFO, "ssp client %s already stopped...", ip.c_str());
+		return;
+	}
 	this->statusLock.lock();
 	this->running = false;
+	this->statusLock.unlock();
 	if (this->worker.joinable()) {
 		this->worker.join();
 	}
@@ -234,7 +302,7 @@ void SSPClientIso::Stop()
 		os_process_pipe_destroy(this->pipe);
 		this->pipe = nullptr;
 	}
-	this->statusLock.unlock();
+	
 }
 
 void SSPClientIso::OnRecvBufferFull()
