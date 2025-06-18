@@ -75,7 +75,7 @@ find_package(FFmpeg REQUIRED COMPONENTS AVCODEC AVUTIL)
 add_subdirectory(thirdpty)
 
 target_include_directories(
-  ${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/lib/ssp/include
+  ${CMAKE_PROJECT_NAME} PRIVATE ${CMAKE_SOURCE_DIR}/src ${CMAKE_SOURCE_DIR}/lib/ssp/include ${CMAKE_SOURCE_DIR}/lib/obs-browser/include
                                 ${CMAKE_SOURCE_DIR}/ssp_connector)
 
 target_compile_definitions(${CMAKE_PROJECT_NAME} PRIVATE ENABLE_HEVC)
