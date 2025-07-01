@@ -75,8 +75,10 @@ SspToolbarManager::SspToolbarManager(QObject *parent)
 	connect(this, &SspToolbarManager::removeSourceActionRequested, this,
 		&SspToolbarManager::doRemoveSourceAction, Qt::QueuedConnection);
 	// Connect to QApplication::activeWindowChanged
+#if define(__APPLE__)	
 	connect(QApplication::instance(), SIGNAL(focusWindowChanged(QWindow *)),
 		this, SLOT(onActiveWindowChanged(QWindow *)));
+#endif		
 	initializeBrowserPanel();
 }
 
