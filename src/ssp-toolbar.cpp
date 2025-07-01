@@ -14,6 +14,8 @@
 #include <random>
 #include <QThread>
 #include <QMouseEvent>
+#include <QWindow>
+#include <QApplication>
 
 SspToolbarManager *SspToolbarManager::s_instance = nullptr;
 QCef *SspToolbarManager::m_qcef = nullptr;
@@ -72,7 +74,9 @@ SspToolbarManager::SspToolbarManager(QObject *parent)
 		&SspToolbarManager::doAddSourceAction, Qt::QueuedConnection);
 	connect(this, &SspToolbarManager::removeSourceActionRequested, this,
 		&SspToolbarManager::doRemoveSourceAction, Qt::QueuedConnection);
-
+	// Connect to QApplication::activeWindowChanged
+	connect(QApplication::instance(), SIGNAL(focusWindowChanged(QWindow *)),
+		this, SLOT(onActiveWindowChanged(QWindow *)));
 	initializeBrowserPanel();
 }
 
@@ -93,6 +97,43 @@ SspToolbarManager::~SspToolbarManager()
 	if (m_qcef) {
 		delete m_qcef;
 		m_qcef = nullptr;
+	}
+}
+// New slot to handle active window changes
+void SspToolbarManager::onActiveWindowChanged(QWindow *window)
+{
+	if (window && window != m_mainWindow->windowHandle()) {
+		// Check if the active window is not the main window or one of our docks
+		bool isDock = false;
+		for (const auto &dock : m_browserDocks) {
+			if (dock && dock->windowHandle() == window) {
+				isDock = true;
+				break;
+			}
+		}
+		if (!isDock) {
+			// Hide all docks
+			for (auto &dock : m_browserDocks) {
+				if (dock && dock->isVisible()) {
+					dock->hide();
+					// Update the corresponding action
+					for (auto it = m_sourceActions.begin();
+					     it != m_sourceActions.end();
+					     ++it) {
+						if (m_browserDocks[it.key()] ==
+						    dock) {
+							QAction *action =
+								it.value();
+							if (action->isChecked()) {
+								action->setChecked(
+									false);
+							}
+							break;
+						}
+					}
+				}
+			}
+		}
 	}
 }
 
@@ -430,135 +471,71 @@ void SspToolbarManager::showBrowserDock(const QString &sourceName,
 {
 	if (!m_browserDocks.contains(sourceKey) ||
 	    !m_browserDocks.value(sourceKey)) {
-		blog(LOG_INFO, "Creating new browser dock for %s",
-		     sourceKey.toStdString().c_str());
 		QDockWidget *dock =
 			createBrowserDock(sourceName, ip, sourceKey);
 		m_browserDocks[sourceKey] = dock;
 
-		connect(dock, &QDockWidget::visibilityChanged, this, [this, sourceName, ip, sourceKey](bool visible) {
-			blog(LOG_INFO, "Visibility changed for %s: %s",
-			     sourceKey.toStdString().c_str(),
-			     visible ? "visible" : "hidden");
-			if (m_sourceActions.contains(sourceKey)) {
-				QAction *action = m_sourceActions[sourceKey];
-				if (action->isChecked() != visible) {
-					action->setChecked(visible);
+		connect(dock, &QDockWidget::visibilityChanged, this,
+			[this, sourceName, ip, sourceKey](bool visible) {
+				if (m_sourceActions.contains(sourceKey)) {
+					QAction *action =
+						m_sourceActions[sourceKey];
+					if (action->isChecked() != visible) {
+						action->setChecked(visible);
+					}
 				}
-			}
-			if (visible && m_browserDocks.contains(sourceKey)) {
-				QDockWidget *currentDock =
-					m_browserDocks.value(sourceKey);
-				if (!currentDock) {
-					blog(LOG_WARNING, "Dock is null for %s",
-					     sourceKey.toStdString().c_str());
-					return;
-				}
-				QPointer<QCefWidget> browser =
-					static_cast<QCefWidget *>(
-						currentDock->widget());
-				if (browser && m_qcef &&
-				    m_qcef->initialized()) {
-					blog(LOG_INFO,
-					     "Browser widget %p exists for %s, scheduling refresh",
-					     (void *)browser.data(),
-					     sourceKey.toStdString().c_str());
-					QTimer::singleShot(200, this, [this, browser, currentDock, sourceKey]() {
-						if (!browser || !currentDock ||
-						    !m_browserDocks.contains(
-							    sourceKey)) {
-							blog(LOG_WARNING,
-							     "Browser %p or dock null for %s in timer",
-							     (void *)browser
-								     .data(),
-							     sourceKey
-								     .toStdString()
-								     .c_str());
-							return;
+				if (visible &&
+				    m_browserDocks.contains(sourceKey)) {
+					QDockWidget *currentDock =
+						m_browserDocks.value(sourceKey);
+					if (currentDock &&
+					    currentDock->widget()) {
+						QCefWidget *browser = static_cast<
+							QCefWidget *>(
+							currentDock->widget());
+						if (browser) {
+							std::string url =
+								"http://" +
+								ip.toStdString();
+							// Try setting startup script before changing URL
+							browser->setStartupScript(
+								"window.onbeforeunload = null;");
+							browser->setURL(url);
+							// No need for scheduleSuppressUnloadDialog if startup script works
 						}
-						blog(LOG_INFO,
-						     "Executing refresh for browser %p for %s",
-						     (void *)browser.data(),
-						     sourceKey.toStdString()
-							     .c_str());
-						browser->setVisible(false);
-						browser->setVisible(true);
-						browser->setFocus();
-						browser->resize(
-							currentDock->size());
-						browser->update();
-						if (m_qcef &&
-						    m_qcef->initialized()) {
-							browser->reloadPage();
-							blog(LOG_INFO,
-							     "Triggered reloadPage for %s",
-							     sourceKey
-								     .toStdString()
-								     .c_str());
-						}
-					});
-				} else if (m_browserInitialized) {
-					blog(LOG_INFO,
-					     "Creating browser widget for %s",
-					     sourceKey.toStdString().c_str());
-					createBrowserWidget(currentDock,
-							    sourceName, ip);
+					} else if (currentDock &&
+						   !currentDock->widget() &&
+						   m_browserInitialized) {
+						createBrowserWidget(currentDock,
+								    sourceName,
+								    ip);
+					}
 				}
-			}
-		});
+			});
 		dock->installEventFilter(this);
 	} else {
-		blog(LOG_INFO, "Showing existing browser dock for %s",
-		     sourceKey.toStdString().c_str());
 		QDockWidget *dock = m_browserDocks.value(sourceKey);
 		if (dock) {
 			dock->setFloating(true);
 			dock->show();
 			dock->raise();
 			dock->activateWindow();
+
 			if (dock->widget()) {
-				QPointer<QCefWidget> browser =
-					static_cast<QCefWidget *>(
-						dock->widget());
-				if (browser && m_qcef &&
-				    m_qcef->initialized()) {
-					QTimer::singleShot(200, this, [this, browser, dock, sourceKey]() {
-						if (!browser || !dock ||
-						    !m_browserDocks.contains(
-							    sourceKey)) {
-							blog(LOG_WARNING,
-							     "Browser %p or dock null for %s in timer",
-							     (void *)browser
-								     .data(),
-							     sourceKey
-								     .toStdString()
-								     .c_str());
-							return;
-						}
-						blog(LOG_INFO,
-						     "Refreshing browser widget %p for %s",
-						     (void *)browser.data(),
-						     sourceKey.toStdString()
-							     .c_str());
-						browser->setVisible(false);
-						browser->setVisible(true);
-						browser->setFocus();
-						browser->resize(dock->size());
-						browser->update();
-						if (m_qcef &&
-						    m_qcef->initialized()) {
-							browser->reloadPage();
-							blog(LOG_INFO,
-							     "Triggered reloadPage for %s",
-							     sourceKey
-								     .toStdString()
-								     .c_str());
-						}
-					});
-				} else if (m_browserInitialized) {
-					createBrowserWidget(dock, sourceName,
-							    ip);
+				QCefWidget *browser = static_cast<QCefWidget *>(
+					dock->widget());
+				if (browser) {
+					std::string url =
+						"http://" + ip.toStdString();
+					// Try setting startup script before changing URL
+					browser->setStartupScript(
+						"window.onbeforeunload = null;");
+					browser->setURL(url);
+					// No need for scheduleSuppressUnloadDialog if startup script works
+					browser->setFocus();
 				}
+			} else if (m_browserInitialized) {
+				createBrowserWidget(dock, sourceName, ip);
 			}
 		} else {
 			m_browserDocks.remove(sourceKey);
@@ -569,6 +546,7 @@ void SspToolbarManager::showBrowserDock(const QString &sourceName,
 
 bool SspToolbarManager::eventFilter(QObject *watched, QEvent *event)
 {
+	// Existing double-click handling
 	if (event->type() == QEvent::MouseButtonDblClick) {
 		QMouseEvent *mouseEvent = static_cast<QMouseEvent *>(event);
 		if (mouseEvent->button() == Qt::LeftButton) {
@@ -585,6 +563,7 @@ bool SspToolbarManager::eventFilter(QObject *watched, QEvent *event)
 		}
 	}
 
+	// Existing hide event handling
 	if (event->type() == QEvent::Hide) {
 		for (auto it = m_browserDocks.begin();
 		     it != m_browserDocks.end(); ++it) {
@@ -602,7 +581,9 @@ bool SspToolbarManager::eventFilter(QObject *watched, QEvent *event)
 				break;
 			}
 		}
-	} else if (event->type() == QEvent::Show) {
+	}
+	// Existing show event handling
+	else if (event->type() == QEvent::Show) {
 		for (auto it = m_browserDocks.begin();
 		     it != m_browserDocks.end(); ++it) {
 			if (watched == it.value()) {
@@ -619,7 +600,9 @@ bool SspToolbarManager::eventFilter(QObject *watched, QEvent *event)
 				break;
 			}
 		}
-	} else if (event->type() == QEvent::Close) {
+	}
+	// Existing close event handling
+	else if (event->type() == QEvent::Close) {
 		for (auto it = m_browserDocks.begin();
 		     it != m_browserDocks.end(); ++it) {
 			if (watched == it.value()) {

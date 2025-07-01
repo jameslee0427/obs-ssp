@@ -41,6 +41,7 @@ private slots:
 	void doAddSourceAction(const QString &sourceName, const QString &ip);
 	void doRemoveSourceAction(const QString &sourceName, const QString &ip);
 	void checkBrowserInitialization(); // Keep this as a slot for QTimer
+	void onActiveWindowChanged(QWindow *window);
 
 private:
 	explicit SspToolbarManager(QObject *parent = nullptr);
